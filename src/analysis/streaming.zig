@@ -431,27 +431,83 @@ pub const StreamingAnalyzer = struct {
 
         var breakdown = core.SizeBreakdown{};
 
+        // Track compressed sizes for download estimation
+        var compressed_dex: u64 = 0;
+        var compressed_native: u64 = 0;
+        var compressed_resources: u64 = 0;
+        var compressed_assets: u64 = 0;
+        var compressed_other: u64 = 0;
+
         // Only reads metadata - no decompression
         for (archive.listFiles()) |entry| {
             const size = entry.uncompressed_size;
+            const compressed_size = entry.compressed_size;
 
             if (std.mem.endsWith(u8, entry.name, ".dex")) {
                 breakdown.dex.size += size;
+                compressed_dex += compressed_size;
             } else if (std.mem.startsWith(u8, entry.name, "res/") or
                 std.mem.eql(u8, entry.name, "resources.arsc"))
             {
                 breakdown.resources.size += size;
+                compressed_resources += compressed_size;
             } else if (std.mem.startsWith(u8, entry.name, "lib/")) {
                 breakdown.native.size += size;
+                compressed_native += compressed_size;
             } else if (std.mem.startsWith(u8, entry.name, "assets/")) {
                 breakdown.assets.size += size;
+                compressed_assets += compressed_size;
             } else {
                 breakdown.other.size += size;
+                compressed_other += compressed_size;
             }
         }
 
         breakdown.calculatePercentages(result.uncompressed_size);
         result.size_breakdown = breakdown;
+
+        // Calculate estimated download size using Brotli compression factors
+        // Play Store serves files with Brotli which is 10-20% more efficient than Deflate
+        // These factors are empirical estimates (multiplied by 100 for integer math)
+        const FACTOR_DEX: u64 = 88; // DEX compresses very well with Brotli
+        const FACTOR_NATIVE: u64 = 92; // Native libs see moderate gains over Deflate
+        const FACTOR_RESOURCES: u64 = 85; // ARSC and XMLs compress significantly
+        const FACTOR_ASSETS: u64 = 95; // Assets (often media) don't compress much more
+        const FACTOR_OTHER: u64 = 90; // Metadata, signatures, etc.
+
+        const est_dex = (compressed_dex * FACTOR_DEX) / 100;
+        const est_native = (compressed_native * FACTOR_NATIVE) / 100;
+        const est_resources = (compressed_resources * FACTOR_RESOURCES) / 100;
+        const est_assets = (compressed_assets * FACTOR_ASSETS) / 100;
+        const est_other = (compressed_other * FACTOR_OTHER) / 100;
+
+        var total_est = est_dex + est_native + est_resources + est_assets + est_other;
+
+        // Signature Block Heuristic:
+        // APK v2/v3 signatures are a block in the ZIP file. Play Store delivers
+        // a different signature (Play signed). The upload signature is essentially wasted bytes.
+        // We assume roughly 4KB overhead for certificates + block headers.
+        if (total_est > 4096) {
+            total_est -= 4096;
+        }
+
+        const ratio = if (result.compressed_size > 0)
+            @as(f32, @floatFromInt(total_est)) / @as(f32, @floatFromInt(result.compressed_size))
+        else
+            1.0;
+
+        result.download_size = .{
+            .download_size = total_est,
+            .file_size = result.compressed_size,
+            .compression_ratio = ratio,
+            .breakdown = .{
+                .dex = est_dex,
+                .native = est_native,
+                .resources = est_resources,
+                .assets = est_assets,
+                .other = est_other,
+            },
+        };
     }
 };
 
