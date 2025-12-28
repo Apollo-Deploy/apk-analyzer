@@ -2,7 +2,7 @@
 //!
 //! Memory-efficient comparison of two APK files using memory-mapped I/O.
 //! Unlike the standard compare tool, this implementation:
-//! - Uses mmap() to avoid loading entire files into memory
+//! - Uses mmap() to avoid loading entire files into memory (falls back on Windows)
 //! - Only parses ZIP central directory metadata
 //! - Compares entries based on compressed size and CRC32
 //! - Peak memory usage is O(number of entries) not O(file sizes)
@@ -38,6 +38,7 @@
 
 const std = @import("std");
 const compare = @import("compare.zig");
+const mmap = @import("../utils/mmap.zig");
 
 // Re-export types from compare module for API compatibility
 pub const FileCategory = compare.FileCategory;
@@ -89,13 +90,14 @@ pub const StreamingApkComparator = struct {
 
     /// Compare two APK files using memory-mapped I/O
     /// Peak memory: O(entry_count) instead of O(file_size)
+    /// On Windows, falls back to regular file reading
     pub fn compareFiles(
         self: *StreamingApkComparator,
         old_path: []const u8,
         new_path: []const u8,
         options: CompareOptions,
     ) !CompareResult {
-        // Open and mmap old file
+        // Open and map old file
         const old_file = std.fs.cwd().openFile(old_path, .{}) catch {
             return error.OldFileNotFound;
         };
@@ -107,22 +109,12 @@ pub const StreamingApkComparator = struct {
 
         if (old_size == 0) return error.InvalidOldFile;
 
-        const old_mapped = std.posix.mmap(
-            null,
-            @intCast(old_size),
-            std.posix.PROT.READ,
-            .{ .TYPE = .PRIVATE },
-            old_file.handle,
-            0,
-        ) catch {
+        var old_mapped = mmap.mapFile(old_file, old_size, self.allocator) catch {
             return error.MmapFailed;
         };
-        defer std.posix.munmap(old_mapped);
+        defer old_mapped.deinit();
 
-        // Advise sequential read for old file
-        std.posix.madvise(@alignCast(old_mapped.ptr), old_mapped.len, 2) catch {};
-
-        // Open and mmap new file
+        // Open and map new file
         const new_file = std.fs.cwd().openFile(new_path, .{}) catch {
             return error.NewFileNotFound;
         };
@@ -134,23 +126,13 @@ pub const StreamingApkComparator = struct {
 
         if (new_size == 0) return error.InvalidNewFile;
 
-        const new_mapped = std.posix.mmap(
-            null,
-            @intCast(new_size),
-            std.posix.PROT.READ,
-            .{ .TYPE = .PRIVATE },
-            new_file.handle,
-            0,
-        ) catch {
+        var new_mapped = mmap.mapFile(new_file, new_size, self.allocator) catch {
             return error.MmapFailed;
         };
-        defer std.posix.munmap(new_mapped);
-
-        // Advise sequential read for new file
-        std.posix.madvise(@alignCast(new_mapped.ptr), new_mapped.len, 2) catch {};
+        defer new_mapped.deinit();
 
         // Compare using mapped data
-        return self.compareMapped(old_mapped, new_mapped, old_size, new_size, options);
+        return self.compareMapped(old_mapped.slice(), new_mapped.slice(), old_size, new_size, options);
     }
 
     /// Compare two memory-mapped APK files
@@ -747,6 +729,7 @@ pub const StreamingContentVerifier = struct {
 
     /// Verify that a specific file has identical content in both APKs
     /// Uses streaming decompression - memory usage is O(chunk_size) not O(file_size)
+    /// On Windows, falls back to regular file reading
     pub fn verifyFileContent(
         self: *StreamingContentVerifier,
         old_path: []const u8,
@@ -764,17 +747,10 @@ pub const StreamingContentVerifier = struct {
         };
         if (old_size == 0) return error.InvalidOldFile;
 
-        const old_mapped = std.posix.mmap(
-            null,
-            @intCast(old_size),
-            std.posix.PROT.READ,
-            .{ .TYPE = .PRIVATE },
-            old_file.handle,
-            0,
-        ) catch {
+        var old_mapped = mmap.mapFile(old_file, old_size, self.allocator) catch {
             return error.MmapFailed;
         };
-        defer std.posix.munmap(old_mapped);
+        defer old_mapped.deinit();
 
         // Open new APK
         const new_file = std.fs.cwd().openFile(new_path, .{}) catch {
@@ -787,25 +763,18 @@ pub const StreamingContentVerifier = struct {
         };
         if (new_size == 0) return error.InvalidNewFile;
 
-        const new_mapped = std.posix.mmap(
-            null,
-            @intCast(new_size),
-            std.posix.PROT.READ,
-            .{ .TYPE = .PRIVATE },
-            new_file.handle,
-            0,
-        ) catch {
+        var new_mapped = mmap.mapFile(new_file, new_size, self.allocator) catch {
             return error.MmapFailed;
         };
-        defer std.posix.munmap(new_mapped);
+        defer new_mapped.deinit();
 
         // Parse both ZIPs
-        var old_zip = ZipParser.parse(self.allocator, old_mapped) catch {
+        var old_zip = ZipParser.parse(self.allocator, old_mapped.slice()) catch {
             return error.InvalidOldFile;
         };
         defer old_zip.deinit();
 
-        var new_zip = ZipParser.parse(self.allocator, new_mapped) catch {
+        var new_zip = ZipParser.parse(self.allocator, new_mapped.slice()) catch {
             return error.InvalidNewFile;
         };
         defer new_zip.deinit();
@@ -987,17 +956,10 @@ pub const StreamingContentVerifier = struct {
         };
         if (old_size == 0) return error.InvalidOldFile;
 
-        const old_mapped = std.posix.mmap(
-            null,
-            @intCast(old_size),
-            std.posix.PROT.READ,
-            .{ .TYPE = .PRIVATE },
-            old_file.handle,
-            0,
-        ) catch {
+        var old_mapped = mmap.mapFile(old_file, old_size, self.allocator) catch {
             return error.MmapFailed;
         };
-        defer std.posix.munmap(old_mapped);
+        defer old_mapped.deinit();
 
         const new_file = std.fs.cwd().openFile(new_path, .{}) catch {
             return error.NewFileNotFound;
@@ -1009,24 +971,17 @@ pub const StreamingContentVerifier = struct {
         };
         if (new_size == 0) return error.InvalidNewFile;
 
-        const new_mapped = std.posix.mmap(
-            null,
-            @intCast(new_size),
-            std.posix.PROT.READ,
-            .{ .TYPE = .PRIVATE },
-            new_file.handle,
-            0,
-        ) catch {
+        var new_mapped = mmap.mapFile(new_file, new_size, self.allocator) catch {
             return error.MmapFailed;
         };
-        defer std.posix.munmap(new_mapped);
+        defer new_mapped.deinit();
 
-        var old_zip = ZipParser.parse(self.allocator, old_mapped) catch {
+        var old_zip = ZipParser.parse(self.allocator, old_mapped.slice()) catch {
             return error.InvalidOldFile;
         };
         defer old_zip.deinit();
 
-        var new_zip = ZipParser.parse(self.allocator, new_mapped) catch {
+        var new_zip = ZipParser.parse(self.allocator, new_mapped.slice()) catch {
             return error.InvalidNewFile;
         };
         defer new_zip.deinit();

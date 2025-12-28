@@ -6,6 +6,7 @@
 const std = @import("std");
 const core = @import("../core/mod.zig");
 const Options = @import("options.zig").Options;
+const mmap = @import("../utils/mmap.zig");
 
 // Import parsers (using existing implementations for now)
 const zip = @import("../parsers/zip.zig");
@@ -139,6 +140,7 @@ pub const Analyzer = struct {
     /// This is more memory-efficient for large files as the OS manages
     /// page loading on-demand rather than loading the entire file upfront.
     /// Only pages that are actually accessed are loaded into physical memory.
+    /// On Windows, falls back to regular file reading.
     pub fn analyzeFileMapped(self: *Analyzer, path: []const u8) core.AnalysisError!core.AnalysisResult {
         const file = std.fs.cwd().openFile(path, .{}) catch {
             return core.AnalysisError.IoError;
@@ -157,26 +159,14 @@ pub const Analyzer = struct {
             return core.AnalysisError.FileTooLarge;
         }
 
-        // Memory-map the file for read-only access
-        // This lets the OS manage which pages are loaded into physical memory
-        const mapped_data = std.posix.mmap(
-            null,
-            @intCast(file_size),
-            std.posix.PROT.READ,
-            .{ .TYPE = .PRIVATE },
-            file.handle,
-            0,
-        ) catch {
-            // Fall back to regular file read if mmap fails
+        // Use cross-platform memory mapping (falls back to regular read on Windows)
+        var mapped = mmap.mapFile(file, file_size, self.allocator) catch {
+            // Fall back to regular file read if mapping fails
             return self.analyzeFile(path);
         };
-        defer std.posix.munmap(mapped_data);
+        defer mapped.deinit();
 
-        // Advise the kernel that we'll read sequentially (improves prefetching)
-        // MADV_SEQUENTIAL = 2 on most Unix systems
-        std.posix.madvise(@alignCast(mapped_data.ptr), mapped_data.len, 2) catch {};
-
-        return self.analyze(mapped_data);
+        return self.analyze(mapped.slice());
     }
 
     // ========================================================================

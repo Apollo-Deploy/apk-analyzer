@@ -142,8 +142,31 @@ dist
 .svelte-kit
 
 # End of https://www.toptal.com/developers/gitignore/api/node
+
+### macOS ###
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+### IDE ###
 .kiro
 .vscode
-.zig-cache
-zig-out
+.idea
+
+### Zig ###
+.zig-cache/
+zig-out/
+
+### Project specific ###
+# Build output
+dist/
+
+# npm package binaries (downloaded during install)
+npm/binaries/
+
+# Test APK files
+*.apk
+*.aab
+tests/fixtures/*.apk
+tests/fixtures/*.aab

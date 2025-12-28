@@ -4,7 +4,7 @@
 //! Unlike the standard Analyzer which loads the entire APK into memory, this
 //! implementation:
 //!
-//! - Uses mmap() to avoid loading entire files into memory
+//! - Uses mmap() to avoid loading entire files into memory (falls back on Windows)
 //! - Processes files sequentially, freeing memory after each
 //! - Peak memory usage is O(largest single file) not O(total APK size)
 //!
@@ -25,6 +25,7 @@
 const std = @import("std");
 const core = @import("../core/mod.zig");
 const Options = @import("options.zig").Options;
+const mmap = @import("../utils/mmap.zig");
 
 // Import parsers
 const zip = @import("../parsers/zip.zig");
@@ -60,6 +61,7 @@ pub const StreamingAnalyzer = struct {
 
     /// Analyze APK/AAB file using memory-mapped I/O
     /// This is the most memory-efficient method for large files
+    /// On Windows, falls back to regular file reading
     pub fn analyzeFile(self: *StreamingAnalyzer, path: []const u8) core.AnalysisError!core.AnalysisResult {
         // Open file
         const file = std.fs.cwd().openFile(path, .{}) catch {
@@ -75,24 +77,14 @@ pub const StreamingAnalyzer = struct {
             return core.AnalysisError.InvalidArchive;
         }
 
-        // Memory-map the file
-        const mapped_data = std.posix.mmap(
-            null,
-            @intCast(file_size),
-            std.posix.PROT.READ,
-            .{ .TYPE = .PRIVATE },
-            file.handle,
-            0,
-        ) catch {
-            // Fall back to regular analysis if mmap fails
+        // Use cross-platform memory mapping (falls back to regular read on Windows)
+        var mapped = mmap.mapFile(file, file_size, self.allocator) catch {
+            // Fall back to regular analysis if mapping fails
             return self.analyzeFileRegular(path);
         };
-        defer std.posix.munmap(mapped_data);
+        defer mapped.deinit();
 
-        // Advise kernel for sequential access
-        std.posix.madvise(@alignCast(mapped_data.ptr), mapped_data.len, 2) catch {};
-
-        return self.analyzeStreaming(mapped_data, file_size);
+        return self.analyzeStreaming(mapped.slice(), file_size);
     }
 
     /// Analyze from memory-mapped or regular data using streaming approach
