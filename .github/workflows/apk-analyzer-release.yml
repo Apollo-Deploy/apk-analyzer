@@ -3,7 +3,7 @@ name: APK Analyzer Release
 on:
   push:
     tags:
-      - 'apk-analyzer-v*'
+      - 'v*'
 
 permissions:
   contents: write
