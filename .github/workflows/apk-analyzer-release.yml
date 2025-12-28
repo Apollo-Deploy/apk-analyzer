@@ -90,19 +90,18 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: npm-binaries
-          path: npm/binaries
+          path: dist
 
       - name: Verify binaries
-        working-directory: npm
         run: |
           echo "Binary structure:"
-          find binaries -type f
+          find dist -type f
           
           # Make Unix binaries executable
-          chmod +x binaries/linux-x64/apk-analyzer 2>/dev/null || true
-          chmod +x binaries/linux-arm64/apk-analyzer 2>/dev/null || true
-          chmod +x binaries/darwin-x64/apk-analyzer 2>/dev/null || true
-          chmod +x binaries/darwin-arm64/apk-analyzer 2>/dev/null || true
+          chmod +x dist/linux-x64/apk-analyzer 2>/dev/null || true
+          chmod +x dist/linux-arm64/apk-analyzer 2>/dev/null || true
+          chmod +x dist/darwin-x64/apk-analyzer 2>/dev/null || true
+          chmod +x dist/darwin-arm64/apk-analyzer 2>/dev/null || true
 
       - name: Extract version from tag
         id: version
