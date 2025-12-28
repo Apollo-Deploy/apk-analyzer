@@ -3,6 +3,7 @@ name: APK Analyzer Release
 on:
   push:
     tags:
+      - 'apk-analyzer-v*'
       - 'v*'
 
 permissions:
@@ -26,11 +27,9 @@ jobs:
           version: ${{ env.ZIG_VERSION }}
 
       - name: Build release binaries
-        working-directory: packages/apk-analyzer
         run: zig build release
 
       - name: Prepare distribution
-        working-directory: packages/apk-analyzer
         run: |
           mkdir -p dist/linux-x64 dist/linux-arm64 dist/darwin-x64 dist/darwin-arm64 dist/win32-x64
           
@@ -48,7 +47,7 @@ jobs:
           chmod +x dist/darwin-arm64/apk-analyzer
 
       - name: Create archives
-        working-directory: packages/apk-analyzer/dist
+        working-directory: dist
         run: |
           tar -czvf apk-analyzer-linux-x64.tar.gz linux-x64
           tar -czvf apk-analyzer-linux-arm64.tar.gz linux-arm64
@@ -61,19 +60,19 @@ jobs:
         with:
           name: release-archives
           path: |
-            packages/apk-analyzer/dist/*.tar.gz
-            packages/apk-analyzer/dist/*.zip
+            dist/*.tar.gz
+            dist/*.zip
           retention-days: 1
 
       - name: Upload binaries for npm
         uses: actions/upload-artifact@v4
         with:
           name: npm-binaries
-          path: packages/apk-analyzer/dist/*/
+          path: dist/*/
           retention-days: 1
 
   publish-npm:
-    name: Publish to npm
+    name: Publish to GitHub Packages
     needs: build-binaries
     runs-on: ubuntu-latest
     steps:
@@ -91,10 +90,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: npm-binaries
-          path: packages/apk-analyzer/npm/binaries
+          path: npm/binaries
 
       - name: Verify binaries
-        working-directory: packages/apk-analyzer/npm
+        working-directory: npm
         run: |
           echo "Binary structure:"
           find binaries -type f
@@ -108,23 +107,25 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/apk-analyzer-v}
+          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${VERSION#apk-analyzer-v}
+          VERSION=${VERSION#v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Update package.json version
-        working-directory: packages/apk-analyzer/npm
+        working-directory: npm
         run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version
 
       - name: Install dependencies
-        working-directory: packages/apk-analyzer/npm
+        working-directory: npm
         run: npm install
 
       - name: Build TypeScript
-        working-directory: packages/apk-analyzer/npm
+        working-directory: npm
         run: npm run build
 
       - name: Publish to GitHub Packages
-        working-directory: packages/apk-analyzer/npm
+        working-directory: npm
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -146,7 +147,9 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/apk-analyzer-v}
+          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${VERSION#apk-analyzer-v}
+          VERSION=${VERSION#v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create Release
