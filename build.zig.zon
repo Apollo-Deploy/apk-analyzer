@@ -1,0 +1,15 @@
+.{
+    .fingerprint = 0x39e9997c2514d19,
+    .name = .apk_analyzer,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.15.0",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "tests",
+        "README.md",
+        "LICENSE",
+    },
+}

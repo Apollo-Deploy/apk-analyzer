@@ -1,0 +1,63 @@
+{
+  "name": "@apollo-deploy/apk-analyzer",
+  "version": "0.0.1",
+  "description": "High-performance APK and AAB analyzer with prebuilt binaries. Analyze and compare Android packages.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "bin",
+    "binaries"
+  ],
+  "bin": {
+    "apk-analyzer": "./bin/apk-analyzer"
+  },
+  "scripts": {
+    "build": "tsc",
+    "copy-binaries": "node scripts/copy-binaries.js",
+    "prepublishOnly": "npm run build && npm run copy-binaries"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "keywords": [
+    "apk",
+    "aab",
+    "android",
+    "analyzer",
+    "mobile",
+    "app-bundle",
+    "compare",
+    "diff",
+    "size-analysis"
+  ],
+  "author": "Apollo Deploy",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Apollo-Deploy/apk-analyzer"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

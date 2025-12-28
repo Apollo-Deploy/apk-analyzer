@@ -1,0 +1,64 @@
+#!/usr/bin/env node
+/**
+ * APK Analyzer CLI wrapper for npm
+ * Automatically selects and runs the correct platform binary
+ */
+
+const { spawn } = require('node:child_process');
+const { existsSync } = require('node:fs');
+const { join } = require('node:path');
+const { platform, arch } = require('node:os');
+
+function getPlatformDir() {
+  const p = platform();
+  const a = arch();
+
+  if (p === 'linux' && a === 'x64') return 'linux-x64';
+  if (p === 'linux' && a === 'arm64') return 'linux-arm64';
+  if (p === 'darwin' && a === 'x64') return 'darwin-x64';
+  if (p === 'darwin' && a === 'arm64') return 'darwin-arm64';
+  if (p === 'win32' && a === 'x64') return 'win32-x64';
+
+  console.error(`Unsupported platform: ${p}-${a}`);
+  process.exit(1);
+}
+
+function getBinaryPath() {
+  const platformDir = getPlatformDir();
+  const binaryName = platform() === 'win32' ? 'apk-analyzer.exe' : 'apk-analyzer';
+
+  const possiblePaths = [
+    // npm package (binaries directory)
+    join(__dirname, '..', 'binaries', platformDir, binaryName),
+    // Development (parent dist directory)
+    join(__dirname, '..', '..', 'dist', platformDir, binaryName),
+    // Legacy location
+    join(__dirname, '..', 'dist', platformDir, binaryName),
+  ];
+
+  for (const p of possiblePaths) {
+    if (existsSync(p)) {
+      return p;
+    }
+  }
+
+  console.error(`APK Analyzer binary not found for ${platformDir}`);
+  console.error(`Searched: ${possiblePaths.join(', ')}`);
+  process.exit(1);
+}
+
+const binaryPath = getBinaryPath();
+const args = process.argv.slice(2);
+
+const proc = spawn(binaryPath, args, {
+  stdio: 'inherit',
+});
+
+proc.on('error', (err) => {
+  console.error(`Failed to run apk-analyzer: ${err.message}`);
+  process.exit(1);
+});
+
+proc.on('close', (code) => {
+  process.exit(code ?? 0);
+});
