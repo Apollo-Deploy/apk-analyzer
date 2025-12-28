@@ -50,6 +50,25 @@ export interface SizeBreakdown {
   other: CategorySize;
 }
 
+export interface DownloadSizeBreakdown {
+  dex: number;
+  native: number;
+  resources: number;
+  assets: number;
+  other: number;
+}
+
+export interface DownloadSizeEstimate {
+  /** Estimated download size in bytes (Play Store serves with Brotli) */
+  downloadSize: number;
+  /** Original APK file size in bytes */
+  fileSize: number;
+  /** Estimated compression ratio (0.0 - 1.0) */
+  compressionRatio: number;
+  /** Detailed breakdown by component */
+  breakdown: DownloadSizeBreakdown;
+}
+
 export interface CertificateInfo {
   subject: string;
   issuer: string;
@@ -108,6 +127,7 @@ export interface AnalysisResult {
   features: Feature[];
   compressedSize: number;
   uncompressedSize: number;
+  downloadSize: DownloadSizeEstimate | null;
   sizeBreakdown: SizeBreakdown;
   nativeLibraries: NativeLibraries;
   dexInfo: DexInfo | null;

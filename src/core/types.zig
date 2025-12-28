@@ -140,6 +140,32 @@ pub const SizeBreakdown = struct {
 };
 
 // ============================================================================
+// Download Size Estimation Types
+// ============================================================================
+
+/// Estimated download size breakdown by category
+pub const DownloadSizeBreakdown = struct {
+    dex: u64 = 0,
+    native: u64 = 0,
+    resources: u64 = 0,
+    assets: u64 = 0,
+    other: u64 = 0,
+};
+
+/// Estimated Play Store download size
+/// Uses empirical Brotli compression factors to estimate actual download size
+pub const DownloadSizeEstimate = struct {
+    /// Estimated download size in bytes (Play Store serves with Brotli)
+    download_size: u64 = 0,
+    /// Original APK file size in bytes
+    file_size: u64 = 0,
+    /// Estimated compression ratio (0.0 - 1.0)
+    compression_ratio: f32 = 0,
+    /// Detailed breakdown by component
+    breakdown: DownloadSizeBreakdown = .{},
+};
+
+// ============================================================================
 // Certificate Types
 // ============================================================================
 
@@ -389,6 +415,8 @@ pub const AnalysisResult = struct {
     compressed_size: u64 = 0,
     /// Uncompressed file size in bytes
     uncompressed_size: u64 = 0,
+    /// Estimated Play Store download size (null if not calculated)
+    download_size: ?DownloadSizeEstimate = null,
     /// Certificate information (null if not available)
     certificate: ?CertificateInfo = null,
     /// DEX analysis information (null if not available)
@@ -462,6 +490,7 @@ pub const AnalysisResultJson = struct {
     features: []const Feature,
     compressed_size: u64,
     uncompressed_size: u64,
+    download_size: ?DownloadSizeEstimate,
     size_breakdown: SizeBreakdown,
     native_libraries: NativeLibraries,
     dex_info: ?DexInfo,
@@ -505,6 +534,7 @@ pub const AnalysisResultJson = struct {
             .features = result.metadata.features,
             .compressed_size = result.compressed_size,
             .uncompressed_size = result.uncompressed_size,
+            .download_size = result.download_size,
             .size_breakdown = result.size_breakdown,
             .native_libraries = result.native_libs,
             .dex_info = result.dex_info,
