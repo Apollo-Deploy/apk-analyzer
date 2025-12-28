@@ -1,10 +1,8 @@
 name: APK Analyzer Release
 
 on:
-  push:
-    tags:
-      - 'apk-analyzer-v*'
-      - 'v*'
+  release:
+    types: [created]
 
 permissions:
   contents: write
@@ -55,14 +53,14 @@ jobs:
           tar -czvf apk-analyzer-darwin-arm64.tar.gz darwin-arm64
           zip -r apk-analyzer-win32-x64.zip win32-x64
 
-      - name: Upload archives for release
-        uses: actions/upload-artifact@v4
+      - name: Upload binaries to release
+        uses: softprops/action-gh-release@v2
         with:
-          name: release-archives
-          path: |
+          files: |
             dist/*.tar.gz
             dist/*.zip
-          retention-days: 1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload binaries for npm
         uses: actions/upload-artifact@v4
@@ -106,7 +104,7 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${{ github.event.release.tag_name }}
           VERSION=${VERSION#apk-analyzer-v}
           VERSION=${VERSION#v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -128,38 +126,3 @@ jobs:
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  create-release:
-    name: Create GitHub Release
-    needs: build-binaries
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download archives
-        uses: actions/download-artifact@v4
-        with:
-          name: release-archives
-          path: artifacts
-
-      - name: Extract version from tag
-        id: version
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          VERSION=${VERSION#apk-analyzer-v}
-          VERSION=${VERSION#v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: APK Analyzer v${{ steps.version.outputs.version }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          files: |
-            artifacts/*.tar.gz
-            artifacts/*.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
